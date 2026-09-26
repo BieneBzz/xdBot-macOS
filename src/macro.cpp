@@ -268,6 +268,14 @@ Macro Macro::XDtoGDR(std::filesystem::path path) {
 void Macro::resetVariables() {
     auto& g = Global::get();
 
+    // A practice checkpoint respawn starts with no key held.  The old
+    // desktop port kept these flags across a death, so resetLevel() replayed
+    // the last wave/ship/UFO input indefinitely after the checkpoint load.
+    for (int i = 0; i < 6; ++i) {
+        g.heldButtons[i] = false;
+        g.wasHolding[i] = false;
+    }
+
     g.ignoreFrame = -1;
     g.ignoreJumpButton = -1;
 

@@ -129,6 +129,21 @@ class $modify(PlayLayer) {
 
     auto& g = Global::get();
 
+    // Do not carry a physical hold through a practice death.  Geometry Dash
+    // can keep PlayerObject's hold state alive while rebuilding a checkpoint,
+    // especially for wave, ship, and UFO movement.
+    m_player1->releaseAllButtons();
+    m_player2->releaseAllButtons();
+    m_player1->m_holdingRight = false;
+    m_player1->m_holdingLeft = false;
+    m_player2->m_holdingRight = false;
+    m_player2->m_holdingLeft = false;
+    for (int i = 0; i < 4; ++i) {
+      m_player1->m_holdingButtons[i] = false;
+      m_player2->m_holdingButtons[i] = false;
+    }
+    Macro::resetVariables();
+
     int frame = Global::getCurrentFrame();
 
     if (!m_isPracticeMode)
@@ -180,14 +195,6 @@ class $modify(PlayLayer) {
 
     if (!m_levelSettings->m_platformerMode || (!g.mod->getSavedValue<bool>("macro_always_practice_fixes") && g.state != state::recording)) return;
 
-    g.ignoreRecordAction = true;
-    for (int i = 0; i < 4; i++) {
-      bool player2 = !(sidesButtons[i] > 2);
-      bool rightKey = sidesButtons[i] == 5 || sidesButtons[i] == 2;
-      if (g.heldButtons[sidesButtons[i]])
-        handleButton(true, indexButton[sidesButtons[i]], player2);
-    }
-    g.ignoreRecordAction = false;
   }
 
 };
