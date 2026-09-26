@@ -67,3 +67,7 @@ build-*/
 
 # CLion
 /cmake-build-*/
+
+# Local macOS dependencies and packaged releases
+.deps-macos/
+*.geode

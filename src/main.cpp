@@ -10,7 +10,7 @@
 
 $execute {
 
-  geode::listenForSettingChanges("macro_accuracy", +[](std::string value) {
+  geode::listenForSettingChanges<std::string>("macro_accuracy", +[](std::string value) {
     auto& g = Global::get();
     
     g.frameFixes = false;
@@ -20,15 +20,15 @@ $execute {
     if (value == "Input Fixes") g.inputFixes = true;
   });
 
-  geode::listenForSettingChanges("frame_fixes_limit", +[](int64_t value) {
+  geode::listenForSettingChanges<int64_t>("frame_fixes_limit", +[](int64_t value) {
     Global::get().frameFixesLimit = value;
   });
 
-  geode::listenForSettingChanges("lock_delta", +[](bool value) {
+  geode::listenForSettingChanges<bool>("lock_delta", +[](bool value) {
     Global::get().lockDelta = value;
   });
 
-  geode::listenForSettingChanges("auto_stop_playing", +[](bool value) {
+  geode::listenForSettingChanges<bool>("auto_stop_playing", +[](bool value) {
     Global::get().stopPlaying = value;
   });
 
@@ -151,7 +151,9 @@ class $modify(PlayLayer) {
     if (g.state == state::recording)
       Macro::updateInfo(this);
 
-    if ((!m_isPracticeMode || frame <= 1 || g.checkpoints.empty()) && g.state == state::recording) {
+    // resetLevel() may reset levelTime before loadFromCheckpoint() restores it.
+    // A frame of 1 here does not mean the practice run started from scratch.
+    if ((!m_isPracticeMode || g.checkpoints.empty()) && g.state == state::recording) {
       g.macro.inputs.clear();
       g.macro.frameFixes.clear();
       g.checkpoints.clear();
@@ -196,7 +198,21 @@ class $modify(BGLHook, GJBaseGameLayer) {
     bool macroInput = false;
   };
 
-  void processCommands(float dt) {
+  void processCommands(float dt, bool isHalfTick, bool isLastTick) {
+    GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+#ifndef GEODE_IS_MACOS
+    processMacroFrame();
+#endif
+  }
+
+#ifdef GEODE_IS_MACOS
+  void update(float dt) {
+    GJBaseGameLayer::update(dt);
+    processMacroFrame();
+  }
+#endif
+
+  void processMacroFrame() {
     auto& g = Global::get();
 
     PlayLayer* pl = PlayLayer::get();
@@ -204,7 +220,7 @@ class $modify(BGLHook, GJBaseGameLayer) {
     if (!pl) {
       // handlePlaying(Global::getCurrentFrame(true));
       // log::debug("{}", Global::getCurrentFrame(true));
-      return GJBaseGameLayer::processCommands(dt);
+      return;
     }
 
     Global::updateSeed();
@@ -229,11 +245,9 @@ class $modify(BGLHook, GJBaseGameLayer) {
       }
 
       if (g.previousFrame == frame && frame != 0 && g.macro.xdBotMacro)
-        return GJBaseGameLayer::processCommands(dt);
+        return;
 
     }
-
-    GJBaseGameLayer::processCommands(dt);
 
     if (g.state == state::none)
       return;

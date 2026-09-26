@@ -8,6 +8,7 @@
 #endif
 
 #include <random>
+#include <cstdlib>
 
 class $modify(CCTextInputNode) {
 
@@ -202,6 +203,14 @@ void Global::updateKeybinds() {
     for (int k = 0; k < keysInts.size(); k++)
       g.keybinds[i].push_back(keysInts[k]);
   }
+#elif defined(GEODE_IS_MACOS)
+  auto& g = Global::get();
+  g.allKeybinds.clear();
+  const std::vector<int> keys[6] = {{KEY_Space, KEY_Up}, {KEY_Left}, {KEY_Right}, {KEY_W}, {KEY_A}, {KEY_D}};
+  for (size_t i = 0; i < 6; ++i) {
+    g.keybinds[i] = keys[i];
+    g.allKeybinds.insert(keys[i].begin(), keys[i].end());
+  }
 #endif
 }
 
@@ -241,6 +250,8 @@ void Global::updateSeed(bool isRestart) {
   if (isRestart && g.state == state::recording) {
 #ifdef GEODE_IS_WINDOWS
     g.macro.seed = *(uintptr_t*)((char*)geode::base::get() + seedAddr);
+#elif defined(GEODE_IS_MACOS)
+    g.macro.seed = GameToolbox::getfast_srand();
 #else
     g.macro.seed = 0;
 #endif
@@ -335,8 +346,7 @@ void Global::frameStepperOff() {
 
 PauseLayer* Global::getPauseLayer() {
   CCArray* children = CCDirector::sharedDirector()->getRunningScene()->getChildren();
-  CCObject* child;
-  CCARRAY_FOREACH(children, child) {
+  for (CCObject* child : CCArrayExt<CCObject*>(children)) {
     if (PauseLayer* pauseLayer = typeinfo_cast<PauseLayer*>(child))
       return pauseLayer;
   }
@@ -346,6 +356,25 @@ PauseLayer* Global::getPauseLayer() {
 
 $execute{
   auto & g = Global::get();
+
+  #ifdef GEODE_IS_MACOS
+  // Older macOS port packages carried paths from the build machine into
+  // user settings. Repair only those exact paths, leaving custom paths alone.
+  if (const char* home = std::getenv("HOME")) {
+    for (auto const& [setting, folder] : {
+      std::pair{"macros_folder", "Macros"},
+      std::pair{"autosaves_folder", "AutoSaves"},
+      std::pair{"render_folder", "Renders"}
+    }) {
+      auto oldPath = std::filesystem::path("/Users/gastbenutzer/Documents") / folder;
+      if (g.mod->getSettingValue<std::filesystem::path>(setting) == oldPath &&
+          !std::filesystem::exists(oldPath)) {
+        g.mod->setSettingValue<std::filesystem::path>(setting,
+          std::filesystem::path(home) / "Documents" / folder);
+      }
+    }
+  }
+  #endif
 
   if (!g.mod->setSavedValue("defaults_set_14", true)) {
     g.mod->setSavedValue("render_fade_in_video", std::to_string(2));
@@ -416,6 +445,8 @@ $execute{
     g.mod->setSavedValue("render_codec", std::string("libx264"));
     #ifdef GEODE_IS_WINDOWS
     g.mod->setSettingValue("ffmpeg_path", geode::dirs::getGameDir() / "ffmpeg.exe");
+    #elif defined(GEODE_IS_MACOS)
+    g.mod->setSettingValue("ffmpeg_path", std::filesystem::path("/opt/homebrew/bin/ffmpeg"));
     #endif
 
     g.mod->setSavedValue("render_record_audio", true);

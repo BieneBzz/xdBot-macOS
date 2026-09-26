@@ -50,6 +50,8 @@ class $modify(CheckpointObject) {
       p2Data,
       #ifdef GEODE_IS_WINDOWS
       *(uintptr_t*)((char*)geode::base::get() + seedAddr),
+      #elif defined(GEODE_IS_MACOS)
+      GameToolbox::getfast_srand(),
       #else
       0,
       #endif
@@ -68,8 +70,22 @@ class $modify(PlayLayer) {
 
     auto& g = Global::get();
 
-    if (!g.cancelCheckpoint)
+    if (!g.cancelCheckpoint) {
       PlayLayer::storeCheckpoint(cp);
+      // On macOS, capture the checkpoint when the game actually stores it.
+      // CheckpointObject::create() alone can run before it is usable.
+      #ifdef GEODE_IS_MACOS
+      if (m_player1 && m_player2) {
+        g.checkpoints[cp] = {
+          Global::getCurrentFrame(),
+          PlayerPracticeFixes::saveData(m_player1),
+          PlayerPracticeFixes::saveData(m_player2),
+          GameToolbox::getfast_srand(),
+          g.previousFrame
+        };
+      }
+      #endif
+    }
     else {
       g.cancelCheckpoint = false;
       return;
@@ -124,6 +140,8 @@ class $modify(PlayLayer) {
       *(uintptr_t*)((char*)geode::base::get() + seedAddr) = seed;
     }
 
+    #elif defined(GEODE_IS_MACOS)
+    if (g.seedEnabled) GameToolbox::fast_srand(g.checkpoints[cp].seed);
     #endif
 
     if (g.state == state::recording)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Geode/Geode.hpp>
+#include <Geode/ui/Popup.hpp>
 // #include <Geode/loader/SettingEvent.hpp>
 
 #include <string>
@@ -15,7 +16,28 @@
 
 using namespace geode::prelude;
 
+// Geode 5 made Popup non-templated and moved setup arguments into init().
+// This adapter keeps xdBot's existing popup implementations small while using
+// the Geode 5 Popup lifecycle underneath.
+template <class... Args>
+class CompatPopup : public geode::Popup {
+protected:
+    virtual bool setup(Args... args) = 0;
+
+    bool initAnchored(float width, float height, Args... args, char const* bg) {
+        if (!geode::Popup::init(width, height, bg)) return false;
+        return this->setup(std::forward<Args>(args)...);
+    }
+
+    bool initAnchored(float width, float height, Args... args, char const* bg, cocos2d::CCRect bgRect) {
+        if (!geode::Popup::init(width, height, bg, bgRect)) return false;
+        return this->setup(std::forward<Args>(args)...);
+    }
+};
+
+#ifdef GEODE_IS_WINDOWS
 const int seedAddr = 0x6a4e20;
+#endif
 
 const int indexButton[6] = { 1, 2, 3, 1, 2, 3 };
 
@@ -79,7 +101,7 @@ public:
     static PauseLayer* getPauseLayer();
 
     Mod* mod = Mod::get();
-    geode::Popup<>* layer = nullptr;
+    geode::Popup* layer = nullptr;
 
     Macro macro;
     Renderer renderer;

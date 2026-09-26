@@ -18,6 +18,11 @@
 
 #endif
 
+#ifdef GEODE_IS_MACOS
+using ActionID = std::string;
+void onKeybind(bool down, ActionID id);
+#endif
+
 const std::vector<std::string> keybindIDs = {
     "open_menu", "toggle_recording", "toggle_playing",
     "toggle_speedhack", "toggle_frame_stepper", "step_frame",
@@ -25,10 +30,25 @@ const std::vector<std::string> keybindIDs = {
 };
 
 class $modify(CCKeyboardDispatcher) {
-  bool dispatchKeyboardMSG(enumKeyCodes key, bool isKeyDown, bool isKeyRepeat) {
+  bool dispatchKeyboardMSG(enumKeyCodes key, bool isKeyDown, bool isKeyRepeat, double timestamp) {
   
     auto& g = Global::get();
 
+#ifdef GEODE_IS_MACOS
+    // Require Control+Shift so ordinary gameplay and text entry keep their keys.
+    if (isKeyDown && !isKeyRepeat && m_bControlPressed && m_bShiftPressed && !g.mod->getSettingValue<bool>("disable_keybinds")) {
+      const std::map<enumKeyCodes, std::string> shortcuts {
+        {KEY_M, "open_menu"_spr}, {KEY_R, "toggle_recording"_spr},
+        {KEY_P, "toggle_playing"_spr}, {KEY_S, "toggle_frame_stepper"_spr},
+        {KEY_N, "step_frame"_spr}, {KEY_H, "toggle_speedhack"_spr},
+        {KEY_V, "toggle_render"_spr}
+      };
+      if (auto it = shortcuts.find(key); it != shortcuts.end()) {
+        onKeybind(true, it->second);
+        return true;
+      }
+    }
+#endif
     int keyInt = static_cast<int>(key);
     if (g.allKeybinds.contains(keyInt) && !isKeyRepeat) {
       for (size_t i = 0; i < 6; i++) {
@@ -51,7 +71,7 @@ class $modify(CCKeyboardDispatcher) {
     //   log::debug("{}", str);
     // }
 
-    return CCKeyboardDispatcher::dispatchKeyboardMSG(key, isKeyDown, isKeyRepeat);
+    return CCKeyboardDispatcher::dispatchKeyboardMSG(key, isKeyDown, isKeyRepeat, timestamp);
   }
 };
 
@@ -65,10 +85,12 @@ namespace keybinds {
 
 #endif
 
+#ifndef GEODE_IS_MACOS
 using namespace keybinds;
+#endif
 
 void onKeybind(bool down, ActionID id) {
-#ifdef GEODE_IS_WINDOWS
+#if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MACOS)
 
   auto& g = Global::get();
 

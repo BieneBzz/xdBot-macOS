@@ -84,6 +84,7 @@ class $modify(FMODAudioEngine) {
 
         if (path != "playSound_01.ogg" || !Global::get().renderer.recordingAudio)
             return FMODAudioEngine::playEffect(path, speed, p2, volume);
+        return 0;
     }
 
 };
@@ -99,14 +100,14 @@ class $modify(GJBaseGameLayer) {
         
         int frame = Global::getCurrentFrame();
 
-        if (g.renderer.recording && frame % static_cast<int>(Global::getTPS() / g.renderer.fps) == 0)
+        if (g.renderer.recording && frame % std::max(1, static_cast<int>(Global::getTPS() / g.renderer.fps)) == 0)
             return g.renderer.handleRecording(pl, frame);
 
         if (g.renderer.recordingAudio && !g.renderer.startedAudio) {
             return g.renderer.startAudio(pl);
         }
 
-        if (g.renderer.recordingAudio && frame % static_cast<int>(Global::getTPS() / g.renderer.fps) == 0)
+        if (g.renderer.recordingAudio && frame % std::max(1, static_cast<int>(Global::getTPS() / g.renderer.fps)) == 0)
             return g.renderer.handleAudioRecording(pl, frame);
     }
 };
@@ -144,11 +145,20 @@ class $modify(CCScheduler) {
 };
 
 bool Renderer::shouldUseAPI() {
-    #ifdef GEODE_IS_WINDOWS
+#ifdef GEODE_IS_MACOS
+    return false; // Use the native FFmpeg process, no FFmpeg API mod required.
+#endif
+    #if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MACOS)
 
     bool foundApi = Loader::get()->isModLoaded("eclipse.ffmpeg-api");
     std::filesystem::path ffmpegPath = Mod::get()->getSettingValue<std::filesystem::path>("ffmpeg_path");
-    bool foundExe = std::filesystem::exists(ffmpegPath) && ffmpegPath.filename().string() == "ffmpeg.exe";
+    bool foundExe = std::filesystem::is_regular_file(ffmpegPath)
+#ifdef GEODE_IS_MACOS
+        && ::access(ffmpegPath.c_str(), X_OK) == 0
+#else
+        && ffmpegPath.filename().string() == "ffmpeg.exe"
+#endif
+    ;
 
     return !foundExe && foundApi;
 
@@ -169,7 +179,13 @@ bool Renderer::toggle() {
 
     bool foundApi = Loader::get()->isModLoaded("eclipse.ffmpeg-api");
     std::filesystem::path ffmpegPath = Mod::get()->getSettingValue<std::filesystem::path>("ffmpeg_path");
-    bool foundExe = std::filesystem::exists(ffmpegPath) && ffmpegPath.filename().string() == "ffmpeg.exe";
+    bool foundExe = std::filesystem::is_regular_file(ffmpegPath)
+#ifdef GEODE_IS_MACOS
+        && ::access(ffmpegPath.c_str(), X_OK) == 0
+#else
+        && ffmpegPath.filename().string() == "ffmpeg.exe"
+#endif
+    ;
 
     g.renderer.usingApi = Renderer::shouldUseAPI();
 
@@ -178,7 +194,13 @@ bool Renderer::toggle() {
     }
     else {
         
-#ifdef GEODE_IS_WINDOWS
+#if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MACOS)
+#ifdef GEODE_IS_MACOS
+        if (!foundExe) {
+            FLAlertLayer::create("FFmpeg", "Choose an executable FFmpeg file in xdBot settings. Homebrew usually installs it at /opt/homebrew/bin/ffmpeg.", "OK")->show();
+            return false;
+        }
+#else
         if (!foundExe && !foundApi) {
             geode::createQuickPopup(
                 "Error",
@@ -194,6 +216,7 @@ bool Renderer::toggle() {
             return false;
         }
 
+        #endif
         g.renderer.ffmpegPath = ffmpegPath.string();
 #else
         if (!foundApi) {
@@ -232,6 +255,10 @@ void Renderer::start() {
     Mod* mod = Mod::get();
     fmod = FMODAudioEngine::sharedEngine();
 
+    if (workerActive.exchange(true)) {
+        Notification::create("Previous render is still saving", NotificationIcon::Info)->show();
+        return;
+    }
     fps = std::stoi(mod->getSavedValue<std::string>("render_fps"));
     codec = mod->getSavedValue<std::string>("render_codec");
     bitrate = mod->getSavedValue<std::string>("render_bitrate") + "M";
@@ -317,6 +344,7 @@ void Renderer::start() {
     }
 
     std::thread([&, path, songFile, songOffset, fadeIn, fadeOut, extension, bitrateApi, settings]() {
+        struct WorkerDone { std::atomic_bool& active; ~WorkerDone() { active = false; } } done{workerActive};
         if (!codec.empty()) codec = "-c:v " + codec + " ";
         if (!bitrate.empty()) bitrate = "-b:v " + bitrate + " ";
         if (extraArgs.empty()) extraArgs = "-pix_fmt yuv420p";
@@ -329,7 +357,7 @@ void Renderer::start() {
 
         std::string fadeArgs;
         std::string command;
-        #ifdef GEODE_IS_WINDOWS
+        #if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MACOS)
         subprocess::Popen process;
         #endif
 
@@ -349,7 +377,7 @@ void Renderer::start() {
             }
             
         } else {
-            #ifdef GEODE_IS_WINDOWS
+            #if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MACOS)
             command = fmt::format(
                 "\"{}\" -y -f rawvideo -pix_fmt rgb24 -s {}x{} -r {} -i - {}{}{} -vf \"vflip,{}{}\" -an \"{}\" ",
                 ffmpegPath,
@@ -367,6 +395,17 @@ void Renderer::start() {
             log::info("Executing: {}", command);
 
             process = subprocess::Popen(command);
+#ifdef GEODE_IS_MACOS
+            if (!process.valid()) {
+                recording = false;
+                frameHasData = false;
+                Loader::get()->queueInMainThread([] {
+                    Global::get().renderer.stop();
+                    FLAlertLayer::create("FFmpeg", "Unable to start FFmpeg. Check the executable path.", "OK")->show();
+                });
+                return;
+            }
+#endif
             #endif
         }
 
@@ -388,19 +427,32 @@ void Renderer::start() {
                         break;
                     }
                 }
-                #ifdef GEODE_IS_WINDOWS
-                else
+                #if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MACOS)
+                else {
+#ifdef GEODE_IS_MACOS
+                    if (!process.m_stdin.write(frame.data(), frame.size())) {
+                        recording = false;
+                        frameHasData = false;
+                        Loader::get()->queueInMainThread([] {
+                            Global::get().renderer.stop();
+                            FLAlertLayer::create("FFmpeg", "FFmpeg stopped accepting video frames. Check render settings and the log.", "OK")->show();
+                        });
+                        return;
+                    }
+#else
                     process.m_stdin.write(frame.data(), frame.size());
+#endif
+                }
                 #endif
             }
-            else lock.unlock();
+            else { lock.unlock(); std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
         }
 
         if (usingApi) {
             ffmpeg.stop();
         }
         else {
-            #ifdef GEODE_IS_WINDOWS
+            #if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MACOS)
             if (process.close()) {
                 Loader::get()->queueInMainThread([] {
                     FLAlertLayer::create("Error", "There was an error saving the render. Wrong render Args.", "Ok")->show();
@@ -450,7 +502,7 @@ void Renderer::start() {
             }
         }
         else {
-            #ifdef GEODE_IS_WINDOWS
+            #if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MACOS)
 
             double totalTime = lastFrame_t;
             if (fadeOutTime > totalTime) fadeOutTime = totalTime / 2;
@@ -501,7 +553,7 @@ void Renderer::start() {
                         fadeOutVideo ? fadeOutStart : totalTime - timeAfter - 3.5f
                     );
 
-                std::filesystem::path file = audioMode == AudioMode::Song ? songFile : tempPathAudio;
+                std::filesystem::path file = audioMode == AudioMode::Song ? std::filesystem::path(songFile) : tempPathAudio;
                 float offset = audioMode == AudioMode::Song ? songOffset : (isPlatformer ? 0.28f : 0.f);
 
                 if (!extraAudioArgs.empty()) extraAudioArgs += " ";
@@ -509,11 +561,11 @@ void Renderer::start() {
                 std::string volume = audioMode == AudioMode::Song ? fmt::format(",volume={:.2f}", musicVolume) : "";
 
                 command = fmt::format(
-                    "\"{}\" -y -ss {} -i \"{}\" -i \"{}\" -t {} -c:v copy {} -filter:a \"[1:a]adelay=0|0{}{}{}\" \"{}\"",
+                    "\"{}\" -y -i \"{}\" -ss {} -i \"{}\" -t {} -map 0:v:0 -map 1:a:0 -c:v copy {} -filter:a \"adelay=0|0{}{}{}\" -shortest \"{}\"",
                     ffmpegPath,
+                    path,
                     offset,
                     file,
-                    path,
                     totalTime,
                     extraAudioArgs,
                     fadeInString,
@@ -537,11 +589,11 @@ void Renderer::start() {
         }
 
         std::error_code ec;
-        std::filesystem::remove(Utils::widen(path), ec);
+        std::filesystem::remove(std::filesystem::path(path), ec);
         if (ec) log::warn("Failed to remove old render file.");
         else {
             ec.clear();
-            std::filesystem::rename(tempPath, Utils::widen(path), ec);
+            std::filesystem::rename(tempPath, std::filesystem::path(path), ec);
             if (ec) log::warn("Failed to rename temp render file.");
         }
 
@@ -617,7 +669,11 @@ void Renderer::changeRes(bool og) {
 }
 
 void MyRenderTexture::begin() {
-    if (Global::get().renderer.usingApi) {
+    if (Global::get().renderer.usingApi
+#ifdef GEODE_IS_MACOS
+        || true
+#endif
+    ) {
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fbo);
 
         texture = new CCTexture2D();
@@ -671,11 +727,15 @@ void MyRenderTexture::begin() {
 #endif
 }
 
-void MyRenderTexture::capture(std::mutex& lock, std::vector<uint8_t>& data, volatile bool& hasData) {
+void MyRenderTexture::capture(std::mutex& lock, std::vector<uint8_t>& data, std::atomic_bool& hasData) {
     CCDirector* director = CCDirector::sharedDirector();
     PlayLayer* pl = PlayLayer::get();
 
-    if (Global::get().renderer.usingApi) {
+    if (Global::get().renderer.usingApi
+#ifdef GEODE_IS_MACOS
+        || true
+#endif
+    ) {
         glViewport(0, 0, width, height);
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fbo);
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -713,7 +773,8 @@ void MyRenderTexture::capture(std::mutex& lock, std::vector<uint8_t>& data, vola
 }
 
 void Renderer::captureFrame() {
-    while (frameHasData) {}
+    while (frameHasData && recording) std::this_thread::yield();
+    if (!recording) return;
     renderer.capture(lock, currentFrame, frameHasData);
 }
 int wa = 0;
@@ -772,8 +833,8 @@ void Renderer::startAudio(PlayLayer* pl) {
     if (dontRecordAudio) return;
 
     if (pl->m_levelEndAnimationStarted && endLevelLayer != nullptr) {
-        CCKeyboardDispatcher::get()->dispatchKeyboardMSG(enumKeyCodes::KEY_Space, true, false);
-        CCKeyboardDispatcher::get()->dispatchKeyboardMSG(enumKeyCodes::KEY_Space, false, false);
+        CCKeyboardDispatcher::get()->dispatchKeyboardMSG(enumKeyCodes::KEY_Space, true, false, 0.0);
+        CCKeyboardDispatcher::get()->dispatchKeyboardMSG(enumKeyCodes::KEY_Space, false, false, 0.0);
     }
     else if (!pl->m_levelEndAnimationStarted) {
 

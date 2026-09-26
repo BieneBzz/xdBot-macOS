@@ -1,87 +1,7 @@
 #include "utils.hpp"
-
-std::string Utils::narrow(const wchar_t* str) {
-    if (!str) {
-        return "";
-    }
-
-#ifdef GEODE_IS_ANDROID
-    std::string result;
-    size_t len = wcslen(str);
-    
-    if (len == 0) {
-        return result;
-    }
-    
-    result.reserve(len);
-
-    for (size_t i = 0; i < len; ++i) {
-        if (str[i] > 0x7F) {
-            return "";
-        }
-        result.push_back(static_cast<char>(str[i]));
-    }
-
-    return result;
-
-#else
-    int size = WideCharToMultiByte(CP_UTF8, 0, str, -1, nullptr, 0, nullptr, nullptr);
-    if (size <= 0) {
-        return "";
-    }
-
-    auto buffer = new char[size];
-    if (!buffer) {
-        return "";
-    }
-
-    WideCharToMultiByte(CP_UTF8, 0, str, -1, buffer, size, nullptr, nullptr);
-    std::string result(buffer, size_t(size) - 1);
-    delete[] buffer;
-
-    return result;
+#ifndef GEODE_IS_WINDOWS
+#include <sys/stat.h>
 #endif
-}
-
-std::wstring Utils::widen(const char* str) {
-#ifdef GEODE_IS_ANDROID
-
-    std::wstring result;
-    result.reserve(strlen(str));
-
-    for (size_t i = 0; i < strlen(str); ++i) {
-        result.push_back(static_cast<wchar_t>(str[i]));
-    }
-
-    return result;
-
-#else
-
-    if (str == nullptr) {
-        return L"Widen Error";
-    }
-
-    int size = MultiByteToWideChar(CP_UTF8, 0, str, -1, nullptr, 0);
-    if (size <= 0) {
-        return L"Widen Error";
-    }
-
-    auto buffer = new wchar_t[size];
-    if (!buffer) {
-        return L"Widen Error";
-    }
-
-    if (MultiByteToWideChar(CP_UTF8, 0, str, -1, buffer, size) <= 0) {
-        delete[] buffer;
-        return L"Widen Error";
-    }
-
-    std::wstring result(buffer, size_t(size) - 1);
-    delete[] buffer;
-    return result;
-
-#endif
-}
 
 std::string Utils::toLower(std::string str) {
     std::transform(str.begin(), str.end(), str.begin(), ::tolower);
@@ -117,9 +37,15 @@ std::time_t Utils::getFileCreationTime(const std::filesystem::path& path) {
     ull.HighPart = creationTime.dwHighDateTime;
 
     return ull.QuadPart / 10000000ULL - 11644473600ULL;
+#else
+    struct stat info {};
+    if (::stat(path.c_str(), &info) != 0) return 0;
+#ifdef GEODE_IS_MACOS
+    return info.st_birthtimespec.tv_sec;
+#else
+    return info.st_mtime;
 #endif
-    std::time_t ret;
-    return ret;
+#endif
 }
 
 std::string Utils::formatTime(std::time_t time) {
@@ -189,4 +115,13 @@ void Utils::setBackgroundColor(cocos2d::extension::CCScale9Sprite* bg) {
 		color = ccc3(255, 255, 255);
 
 	bg->setColor(color);
+}
+
+void Utils::setBackgroundColor(geode::NineSlice* bg) {
+    cocos2d::ccColor3B color = Mod::get()->getSettingValue<cocos2d::ccColor3B>("background_color");
+
+    if (color == ccc3(51, 68, 153))
+        color = ccc3(255, 255, 255);
+
+    bg->setColor(color);
 }

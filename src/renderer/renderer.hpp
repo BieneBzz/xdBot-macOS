@@ -1,3 +1,5 @@
+#pragma once
+#include <atomic>
 #include "../includes.hpp"
 #include "ffmpeg/events.hpp"
 
@@ -14,7 +16,7 @@ public:
     unsigned fbo;
     geode::prelude::CCTexture2D* texture = nullptr;
     void begin();
-    void capture(std::mutex& lock, std::vector<uint8_t>& data, volatile bool& lul);
+    void capture(std::mutex& lock, std::vector<uint8_t>& data, std::atomic_bool& lul);
 };
 
 class Renderer {
@@ -22,10 +24,11 @@ public:
 
     Renderer() : width(1920), height(1080), fps(60) {}
 
-    volatile bool frameHasData;
+    std::atomic_bool frameHasData{false};
+    std::atomic_bool workerActive{false};
     bool levelFinished = false;
-    bool recording = false;
-    bool pause = false;
+    std::atomic_bool recording{false};
+    std::atomic_bool pause{false};
     int audioMode = 0;
     float ogMusicVol;
     float ogSFXVol;
@@ -35,7 +38,7 @@ public:
     bool usingApi = false;
     bool dontRender = false;
     bool dontRecordAudio = false;
-    bool recordingAudio = false;
+    std::atomic_bool recordingAudio{false};
     bool startedAudio = false;
     bool isPlatformer = false;
     int finishFrame = 0;
@@ -53,7 +56,11 @@ public:
     std::vector<uint8_t> currentFrame;
     std::mutex lock;
     std::string codec = "", bitrate = "12M", extraArgs = "", videoArgs = "", extraAudioArgs = "", path = "";
+    #ifdef GEODE_IS_MACOS
+    std::string ffmpegPath = "/opt/homebrew/bin/ffmpeg";
+#else
     std::string ffmpegPath = (geode::dirs::getGameDir() / "ffmpeg.exe").string();
+#endif
     std::unordered_set<int> renderedFrames;
 
     FMODAudioEngine* fmod = nullptr;

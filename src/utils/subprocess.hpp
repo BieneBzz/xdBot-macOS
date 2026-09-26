@@ -94,3 +94,6 @@ namespace subprocess {
 }
 
 #endif
+#ifdef GEODE_IS_MACOS
+#include "subprocess_posix.hpp"
+#endif
