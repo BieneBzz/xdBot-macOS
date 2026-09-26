@@ -1,0 +1,35 @@
+name: Build mobile ports
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - port/mobile-2.2081
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Android64
+            runner: ubuntu-latest
+          - platform: iOS
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    name: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build xdBot
+        id: build
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          sdk: given
+          target: ${{ matrix.platform }}
+          bindings-ref: 7f6c2a75742856de88dad354e576dcff8a28e881
+          use-lto: false
+      - name: Save package
+        uses: actions/upload-artifact@v4
+        with:
+          name: xdbot-${{ matrix.platform }}
+          path: ${{ steps.build.outputs.build-output }}/*.geode

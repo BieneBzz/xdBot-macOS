@@ -8,6 +8,8 @@
 #include "hacks/layout_mode.hpp"
 #include "hacks/show_trajectory.hpp"
 
+#if defined(GEODE_IS_WINDOWS) || defined(GEODE_IS_MACOS)
+
 #include <Geode/modify/CCKeyboardDispatcher.hpp>
 #include <Geode/modify/CCTouchDispatcher.hpp>
 
@@ -74,16 +76,6 @@ class $modify(CCKeyboardDispatcher) {
     return CCKeyboardDispatcher::dispatchKeyboardMSG(key, isKeyDown, isKeyRepeat, timestamp);
   }
 };
-
-#ifdef GEODE_IS_ANDROID
-
-namespace keybinds {
-
-  struct ActionID {};
-
-};
-
-#endif
 
 #ifndef GEODE_IS_MACOS
 using namespace keybinds;
@@ -256,3 +248,5 @@ $execute{
 
   #endif
 }
+
+#endif // Desktop keyboard bindings
