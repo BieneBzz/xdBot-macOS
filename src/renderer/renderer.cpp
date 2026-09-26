@@ -171,6 +171,11 @@ bool Renderer::shouldUseAPI() {
 }
 
 bool Renderer::toggle() {
+#if defined(GEODE_IS_ANDROID) || defined(GEODE_IS_IOS)
+    FLAlertLayer::create("Render", "Video rendering is not available in this mobile preview.", "OK")->show();
+    return false;
+#endif
+
     auto& g = Global::get();
     if (Loader::get()->isModLoaded("syzzi.click_between_frames")) {
         FLAlertLayer::create("Render", "Disable CBF in Geode to render a level.", "OK")->show();

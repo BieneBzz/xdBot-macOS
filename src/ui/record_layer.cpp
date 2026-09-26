@@ -17,7 +17,9 @@ const std::vector<std::vector<RecordSetting>> settings {
 	{
 		{ "TPS Bypass:", "macro_tps_enabled", InputType::Tps, 0.4f },
 		{ "Speedhack:", "macro_speedhack_enabled", InputType::Speedhack, 0.4f },
+		#ifndef GEODE_IS_ANDROID
 		{ "Seed:", "macro_seed_enabled", InputType::Seed, 0.4f },
+		#endif
 		{ "Enable Noclip:", "macro_noclip", InputType::Settings, 0.325f, menu_selector(NoclipSettingsLayer::open) },
 		{ "Show Trajectory:", "macro_show_trajectory", InputType::Settings, 0.325f, menu_selector(TrajectorySettingsLayer::open)  },
 		{ "Enable Frame Stepper:", "macro_frame_stepper", InputType::None },

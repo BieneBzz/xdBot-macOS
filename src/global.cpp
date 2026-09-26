@@ -240,7 +240,7 @@ void Global::updateSeed(bool isRestart) {
 
 #ifdef GEODE_IS_WINDOWS
     *(uintptr_t*)((char*)geode::base::get() + seedAddr) = finalSeed;
-#else
+#elif defined(GEODE_IS_MACOS) || defined(GEODE_IS_IOS)
     GameToolbox::fast_srand(finalSeed);
 #endif
 
@@ -250,7 +250,7 @@ void Global::updateSeed(bool isRestart) {
   if (isRestart && g.state == state::recording) {
 #ifdef GEODE_IS_WINDOWS
     g.macro.seed = *(uintptr_t*)((char*)geode::base::get() + seedAddr);
-#elif defined(GEODE_IS_MACOS)
+#elif defined(GEODE_IS_MACOS) || defined(GEODE_IS_IOS)
     g.macro.seed = GameToolbox::getfast_srand();
 #else
     g.macro.seed = 0;
@@ -476,6 +476,9 @@ $execute{
   g.coinFinder = g.mod->getSavedValue<bool>("macro_coin_finder");
   g.frameStepper = g.mod->getSavedValue<bool>("macro_frame_stepper");
   g.seedEnabled = g.mod->getSavedValue<bool>("macro_seed_enabled");
+  #ifdef GEODE_IS_ANDROID
+  g.seedEnabled = false; // No verified Android RNG binding for GD 2.2081.
+  #endif
   g.frameLabel = g.mod->getSavedValue<bool>("macro_show_frame_label");
   g.speedhackAudio = g.mod->getSavedValue<bool>("macro_speedhack_audio");
   g.trajectoryBothSides = g.mod->getSavedValue<bool>("macro_trajectory_both_sides");

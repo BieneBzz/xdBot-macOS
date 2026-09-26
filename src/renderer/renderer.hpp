@@ -58,9 +58,11 @@ public:
     std::string codec = "", bitrate = "12M", extraArgs = "", videoArgs = "", extraAudioArgs = "", path = "";
     #ifdef GEODE_IS_MACOS
     std::string ffmpegPath = "/opt/homebrew/bin/ffmpeg";
-#else
+    #elif defined(GEODE_IS_WINDOWS)
     std::string ffmpegPath = (geode::dirs::getGameDir() / "ffmpeg.exe").string();
-#endif
+    #else
+    std::string ffmpegPath;
+    #endif
     std::unordered_set<int> renderedFrames;
 
     FMODAudioEngine* fmod = nullptr;
