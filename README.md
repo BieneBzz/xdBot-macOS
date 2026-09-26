@@ -4,7 +4,7 @@ Apple Silicon build of [Zilko's xdBot](https://github.com/ZiLko/xdBot) for **Geo
 
 ## Download
 
-Download the latest `zilko.xdbot.geode` from the [macOS Releases page](https://github.com/BieneBzz/xdBot-macOS/releases). The current macOS build is `v2.4.1-prerelease.6`. It is for macOS arm64; the upstream Windows and Android builds are available from the [original xdBot releases](https://github.com/ZiLko/xdBot/releases).
+Download the latest `zilko.xdbot.geode` from the [macOS Releases page](https://github.com/BieneBzz/xdBot-macOS/releases). The current macOS build is `v2.4.1-prerelease.7`. It is for macOS arm64; the upstream Windows and Android builds are available from the [original xdBot releases](https://github.com/ZiLko/xdBot/releases).
 
 ## Install
 
